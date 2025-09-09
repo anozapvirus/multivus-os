@@ -95,6 +95,7 @@ O **MULTIVUS OS** é um sistema completo e moderno para gestão de ordens de ser
 \`\`\`bash
 # Clone o repositório
 git clone https://github.com/anozapvirus/multivus-os.git
+
 cd multivus-os
 
 # Instale dependências
