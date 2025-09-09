@@ -1,0 +1,19 @@
+{
+  "name": "multivus-desktop",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "preview": "vite preview",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^1.5.3"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^1.5.10",
+    "vite": "^5.0.8"
+  }
+}

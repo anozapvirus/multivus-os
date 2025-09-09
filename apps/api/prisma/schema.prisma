@@ -1,0 +1,697 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Company and Branch Management
+model Company {
+  id          String   @id @default(cuid())
+  name        String
+  document    String   @unique // CNPJ
+  email       String?
+  phone       String?
+  address     String?
+  logoUrl     String?
+  settings    Json?    // Company-specific settings
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  branches    Branch[]
+  users       User[]
+  customers   Customer[]
+  workOrders  WorkOrder[]
+  products    Product[]
+  suppliers   Supplier[]
+
+  @@map("companies")
+}
+
+model Branch {
+  id          String   @id @default(cuid())
+  companyId   String
+  name        String
+  code        String   // Branch code for OS numbering
+  address     String?
+  phone       String?
+  email       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  users       User[]
+  workOrders  WorkOrder[]
+  stockLocations StockLocation[]
+  cashSessions CashSession[]
+
+  @@unique([companyId, code])
+  @@map("branches")
+}
+
+// User Management and Authentication
+model User {
+  id          String   @id @default(cuid())
+  companyId   String
+  branchId    String?
+  email       String   @unique
+  password    String
+  name        String
+  phone       String?
+  role        UserRole @default(TECHNICIAN)
+  isActive    Boolean  @default(true)
+  lastLoginAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branch      Branch?  @relation(fields: [branchId], references: [id])
+  
+  // Work Order relationships
+  assignedWorkOrders WorkOrder[] @relation("AssignedTechnician")
+  createdWorkOrders  WorkOrder[] @relation("CreatedBy")
+  timesheets         WorkOrderTimesheet[]
+  auditLogs          AuditLog[]
+  sessions           UserSession[]
+
+  @@map("users")
+}
+
+model UserSession {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_sessions")
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  TECHNICIAN
+  ATTENDANT
+  FINANCIAL
+  CLIENT
+}
+
+// Customer Management
+model Customer {
+  id          String   @id @default(cuid())
+  companyId   String
+  name        String
+  document    String   // CPF/CNPJ
+  email       String?
+  phone       String
+  address     String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  workOrders  WorkOrder[]
+  devices     Device[]
+
+  @@unique([companyId, document])
+  @@map("customers")
+}
+
+// Device Management
+model Device {
+  id          String   @id @default(cuid())
+  customerId  String
+  brand       String
+  model       String
+  serialNumber String?
+  imei        String?
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  workOrders  WorkOrder[]
+
+  @@map("devices")
+}
+
+// Work Order Management
+model WorkOrder {
+  id              String           @id @default(cuid())
+  companyId       String
+  branchId        String
+  number          String           // Auto-generated per branch
+  customerId      String
+  deviceId        String?
+  assignedTo      String?
+  createdBy       String
+  
+  // Device info (can be different from Device record)
+  deviceBrand     String
+  deviceModel     String
+  deviceSerial    String?
+  deviceImei      String?
+  devicePassword  String?          // Encrypted
+  
+  // Service details
+  reportedIssue   String
+  diagnosis       String?
+  solution        String?
+  accessories     String?          // JSON array of accessories received
+  
+  // Status and timing
+  status          WorkOrderStatus  @default(DRAFT)
+  priority        Priority         @default(MEDIUM)
+  estimatedHours  Float?
+  
+  // Financial
+  laborCost       Decimal?         @db.Decimal(10,2)
+  partsCost       Decimal?         @db.Decimal(10,2)
+  totalCost       Decimal?         @db.Decimal(10,2)
+  
+  // Dates
+  receivedAt      DateTime?
+  estimatedAt     DateTime?
+  completedAt     DateTime?
+  deliveredAt     DateTime?
+  
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  // Relations
+  company         Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branch          Branch           @relation(fields: [branchId], references: [id])
+  customer        Customer         @relation(fields: [customerId], references: [id])
+  device          Device?          @relation(fields: [deviceId], references: [id])
+  assignedTechnician User?         @relation("AssignedTechnician", fields: [assignedTo], references: [id])
+  creator         User             @relation("CreatedBy", fields: [createdBy], references: [id])
+  
+  items           WorkOrderItem[]
+  photos          WorkOrderPhoto[]
+  attachments     Attachment[]
+  statusHistory   WorkOrderStatusHistory[]
+  timesheets      WorkOrderTimesheet[]
+  payments        Payment[]
+  warranties      Warranty[]
+
+  @@unique([companyId, branchId, number])
+  @@map("work_orders")
+}
+
+model WorkOrderItem {
+  id            String    @id @default(cuid())
+  workOrderId   String
+  productId     String?
+  type          ItemType  @default(SERVICE)
+  description   String
+  quantity      Float     @default(1)
+  unitCost      Decimal   @db.Decimal(10,2)
+  unitPrice     Decimal   @db.Decimal(10,2)
+  totalCost     Decimal   @db.Decimal(10,2)
+  totalPrice    Decimal   @db.Decimal(10,2)
+  warrantyDays  Int?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  workOrder     WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  product       Product?  @relation(fields: [productId], references: [id])
+
+  @@map("work_order_items")
+}
+
+model WorkOrderPhoto {
+  id          String    @id @default(cuid())
+  workOrderId String
+  filename    String
+  originalName String
+  mimeType    String
+  size        Int
+  url         String
+  type        PhotoType @default(DIAGNOSTIC)
+  description String?
+  takenAt     DateTime  @default(now())
+
+  workOrder   WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+
+  @@map("work_order_photos")
+}
+
+model Attachment {
+  id          String    @id @default(cuid())
+  workOrderId String
+  filename    String
+  originalName String
+  mimeType    String
+  size        Int
+  url         String
+  uploadedAt  DateTime  @default(now())
+
+  workOrder   WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+
+  @@map("attachments")
+}
+
+model WorkOrderStatusHistory {
+  id          String          @id @default(cuid())
+  workOrderId String
+  fromStatus  WorkOrderStatus?
+  toStatus    WorkOrderStatus
+  changedBy   String
+  notes       String?
+  changedAt   DateTime        @default(now())
+
+  workOrder   WorkOrder       @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  user        User            @relation(fields: [changedBy], references: [id])
+
+  @@map("work_order_status_history")
+}
+
+model WorkOrderTimesheet {
+  id          String    @id @default(cuid())
+  workOrderId String
+  userId      String
+  startTime   DateTime
+  endTime     DateTime?
+  description String?
+  createdAt   DateTime  @default(now())
+
+  workOrder   WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id])
+
+  @@map("work_order_timesheets")
+}
+
+enum WorkOrderStatus {
+  DRAFT
+  TRIAGING
+  AWAITING_APPROVAL
+  AWAITING_PARTS
+  IN_PROGRESS
+  QUALITY_CHECK
+  READY_FOR_PICKUP
+  DELIVERED
+  COMPLETED
+  WARRANTY
+  RMA
+  CANCELLED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum ItemType {
+  SERVICE
+  PART
+  ACCESSORY
+}
+
+enum PhotoType {
+  INTAKE
+  DIAGNOSTIC
+  REPAIR
+  COMPLETION
+  DELIVERY
+}
+
+// Product and Inventory Management
+model Product {
+  id            String    @id @default(cuid())
+  companyId     String
+  sku           String
+  name          String
+  description   String?
+  category      String?
+  brand         String?
+  model         String?
+  
+  // Pricing
+  costPrice     Decimal?  @db.Decimal(10,2)
+  salePrice     Decimal   @db.Decimal(10,2)
+  
+  // Inventory
+  trackStock    Boolean   @default(true)
+  currentStock  Float     @default(0)
+  minStock      Float     @default(0)
+  maxStock      Float?
+  
+  // Product details
+  barcode       String?
+  ncm           String?   // Brazilian tax classification
+  cfop          String?   // Brazilian fiscal operation code
+  
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  company       Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  workOrderItems WorkOrderItem[]
+  stockMovements StockMovement[]
+  purchaseItems  PurchaseItem[]
+
+  @@unique([companyId, sku])
+  @@map("products")
+}
+
+model StockLocation {
+  id          String    @id @default(cuid())
+  branchId    String
+  name        String
+  description String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  branch      Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  movements   StockMovement[]
+
+  @@map("stock_locations")
+}
+
+model StockMovement {
+  id              String          @id @default(cuid())
+  productId       String
+  locationId      String
+  type            MovementType
+  quantity        Float
+  unitCost        Decimal?        @db.Decimal(10,2)
+  totalCost       Decimal?        @db.Decimal(10,2)
+  reference       String?         // Work Order, Purchase Order, etc.
+  notes           String?
+  createdAt       DateTime        @default(now())
+
+  product         Product         @relation(fields: [productId], references: [id])
+  location        StockLocation   @relation(fields: [locationId], references: [id])
+
+  @@map("stock_movements")
+}
+
+enum MovementType {
+  IN
+  OUT
+  ADJUSTMENT
+  TRANSFER
+  RETURN
+  WARRANTY_RETURN
+}
+
+// Supplier and Purchase Management
+model Supplier {
+  id          String    @id @default(cuid())
+  companyId   String
+  name        String
+  document    String?   // CNPJ/CPF
+  email       String?
+  phone       String?
+  address     String?
+  contact     String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  purchaseOrders PurchaseOrder[]
+
+  @@map("suppliers")
+}
+
+model PurchaseOrder {
+  id          String            @id @default(cuid())
+  supplierId  String
+  number      String
+  status      PurchaseStatus    @default(DRAFT)
+  totalAmount Decimal           @db.Decimal(10,2)
+  notes       String?
+  orderDate   DateTime          @default(now())
+  expectedDate DateTime?
+  receivedDate DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  supplier    Supplier          @relation(fields: [supplierId], references: [id])
+  items       PurchaseItem[]
+
+  @@map("purchase_orders")
+}
+
+model PurchaseItem {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  productId       String
+  quantity        Float
+  unitCost        Decimal       @db.Decimal(10,2)
+  totalCost       Decimal       @db.Decimal(10,2)
+  receivedQty     Float         @default(0)
+  createdAt       DateTime      @default(now())
+
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product         Product       @relation(fields: [productId], references: [id])
+
+  @@map("purchase_items")
+}
+
+enum PurchaseStatus {
+  DRAFT
+  SENT
+  CONFIRMED
+  PARTIAL_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+// Financial Management
+model Payment {
+  id            String        @id @default(cuid())
+  workOrderId   String
+  method        PaymentMethod
+  amount        Decimal       @db.Decimal(10,2)
+  installments  Int           @default(1)
+  dueDate       DateTime?
+  paidAt        DateTime?
+  status        PaymentStatus @default(PENDING)
+  pixKey        String?       // For Pix payments
+  pixQrCode     String?
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  workOrder     WorkOrder     @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  receivables   Receivable[]
+
+  @@map("payments")
+}
+
+model Receivable {
+  id          String          @id @default(cuid())
+  paymentId   String
+  installment Int
+  amount      Decimal         @db.Decimal(10,2)
+  dueDate     DateTime
+  paidAmount  Decimal?        @db.Decimal(10,2)
+  paidAt      DateTime?
+  status      ReceivableStatus @default(PENDING)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  payment     Payment         @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@map("receivables")
+}
+
+model CashSession {
+  id          String    @id @default(cuid())
+  branchId    String
+  openedBy    String
+  closedBy    String?
+  openedAt    DateTime  @default(now())
+  closedAt    DateTime?
+  openAmount  Decimal   @db.Decimal(10,2) @default(0)
+  closeAmount Decimal?  @db.Decimal(10,2)
+  notes       String?
+
+  branch      Branch    @relation(fields: [branchId], references: [id])
+
+  @@map("cash_sessions")
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  PIX
+  TRANSFER
+  CHECK
+  INSTALLMENT
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum ReceivableStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+// Warranty and RMA Management
+model Warranty {
+  id            String      @id @default(cuid())
+  workOrderId   String
+  type          WarrantyType
+  startDate     DateTime
+  endDate       DateTime
+  description   String?
+  isActive      Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+
+  workOrder     WorkOrder   @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  rmaCases      RmaCase[]
+
+  @@map("warranties")
+}
+
+model RmaCase {
+  id          String    @id @default(cuid())
+  warrantyId  String
+  reason      String
+  status      RmaStatus @default(OPENED)
+  resolution  String?
+  createdAt   DateTime  @default(now())
+  resolvedAt  DateTime?
+
+  warranty    Warranty  @relation(fields: [warrantyId], references: [id])
+
+  @@map("rma_cases")
+}
+
+enum WarrantyType {
+  PARTS
+  SERVICE
+  FULL
+}
+
+enum RmaStatus {
+  OPENED
+  IN_ANALYSIS
+  APPROVED
+  REJECTED
+  RESOLVED
+}
+
+// Communication and Notifications
+model NotificationTemplate {
+  id          String              @id @default(cuid())
+  name        String
+  type        NotificationType
+  channel     NotificationChannel
+  subject     String?
+  content     String
+  variables   Json?               // Available template variables
+  isActive    Boolean             @default(true)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@map("notification_templates")
+}
+
+enum NotificationType {
+  ORDER_CREATED
+  ORDER_APPROVED
+  ORDER_READY
+  ORDER_DELIVERED
+  BUDGET_PENDING
+  BUDGET_EXPIRED
+  WARRANTY_EXPIRING
+  PAYMENT_OVERDUE
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  WHATSAPP
+  PUSH
+}
+
+// Audit and Compliance
+model AuditLog {
+  id          String    @id @default(cuid())
+  userId      String
+  action      String
+  resource    String
+  resourceId  String
+  oldValues   Json?
+  newValues   Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime  @default(now())
+
+  user        User      @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
+
+// Sync Management for Offline Support
+model SyncChange {
+  id          String    @id @default(cuid())
+  table       String
+  recordId    String
+  operation   String    // INSERT, UPDATE, DELETE
+  data        Json
+  version     BigInt
+  createdAt   DateTime  @default(now())
+
+  @@map("sync_changes")
+}
+
+model SyncCursor {
+  id          String   @id @default(cuid())
+  deviceId    String   @unique
+  lastSync    DateTime
+  version     BigInt
+
+  @@map("sync_cursors")
+}
+
+// API and Integration Management
+model ApiKey {
+  id          String    @id @default(cuid())
+  name        String
+  key         String    @unique
+  permissions Json?     // Array of allowed endpoints/actions
+  isActive    Boolean   @default(true)
+  expiresAt   DateTime?
+  lastUsedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@map("api_keys")
+}
+
+model Webhook {
+  id          String      @id @default(cuid())
+  name        String
+  url         String
+  events      Json        // Array of events to listen to
+  secret      String?
+  isActive    Boolean     @default(true)
+  lastTriggered DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@map("webhooks")
+}

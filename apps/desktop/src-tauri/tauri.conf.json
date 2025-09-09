@@ -1,0 +1,81 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/schema.json",
+  "build": {
+    "beforeBuildCommand": "cd ../web && npm run build",
+    "beforeDevCommand": "cd ../web && npm run dev",
+    "devPath": "http://localhost:3000",
+    "distDir": "../web/dist"
+  },
+  "package": {
+    "productName": "MULTIVUS OS",
+    "version": "1.0.0"
+  },
+  "tauri": {
+    "allowlist": {
+      "all": false,
+      "shell": {
+        "all": false,
+        "open": true
+      },
+      "fs": {
+        "all": true,
+        "scope": ["$APPDATA/multivus/*", "$DOCUMENT/*"]
+      },
+      "dialog": {
+        "all": true
+      },
+      "notification": {
+        "all": true
+      },
+      "http": {
+        "all": true,
+        "request": true,
+        "scope": ["https://**", "http://localhost:*"]
+      }
+    },
+    "bundle": {
+      "active": true,
+      "category": "Business",
+      "copyright": "© 2024 MULTIVUS OS",
+      "deb": {
+        "depends": []
+      },
+      "externalBin": [],
+      "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+      "identifier": "com.multivus.os",
+      "longDescription": "Sistema completo de gestão de ordens de serviço para assistências técnicas",
+      "macOS": {
+        "entitlements": null,
+        "exceptionDomain": "",
+        "frameworks": [],
+        "providerShortName": null,
+        "signingIdentity": null
+      },
+      "resources": [],
+      "shortDescription": "MULTIVUS OS - Sistema de Ordem de Serviço",
+      "targets": "all",
+      "windows": {
+        "certificateThumbprint": null,
+        "digestAlgorithm": "sha256",
+        "timestampUrl": ""
+      }
+    },
+    "security": {
+      "csp": null
+    },
+    "updater": {
+      "active": false
+    },
+    "windows": [
+      {
+        "fullscreen": false,
+        "height": 800,
+        "resizable": true,
+        "title": "MULTIVUS OS",
+        "width": 1200,
+        "minWidth": 800,
+        "minHeight": 600
+      }
+    ]
+  }
+}

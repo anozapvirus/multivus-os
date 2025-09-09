@@ -1,0 +1,474 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ma/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===== SISTEMA DE EMPRESAS E PLANOS =====
+model Plan {
+  id          String @id @default(cuid())
+  name        String
+  description String?
+  price       Decimal
+  maxAdmins   Int     @default(5)
+  maxSellers  Int     @default(10)
+  maxOrders   Int     @default(1000)
+  features    Json    // Array de features disponíveis
+  active      Boolean @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  companies Company[]
+
+  @@map("plans")
+}
+
+model Company {
+  id              String    @id @default(cuid())
+  name            String
+  document        String    @unique // CNPJ
+  email           String    @unique
+  phone           String?
+  address         String?
+  city            String?
+  state           String?
+  zipCode         String?
+  planId          String
+  planExpiresAt   DateTime
+  active          Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  plan            Plan      @relation(fields: [planId], references: [id])
+  branches        Branch[]
+  users           User[]
+  customers       Customer[]
+  workOrders      WorkOrder[]
+  products        Product[]
+  suppliers       Supplier[]
+  invoices        Invoice[]
+  notifications   Notification[]
+
+  @@map("companies")
+}
+
+model Branch {
+  id          String @id @default(cuid())
+  name        String
+  address     String?
+  phone       String?
+  companyId   String
+  active      Boolean @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company     Company @relation(fields: [companyId], references: [id])
+  users       User[]
+  workOrders  WorkOrder[]
+  inventory   ProductStock[]
+
+  @@map("branches")
+}
+
+// ===== SISTEMA DE USUÁRIOS =====
+enum UserRole {
+  SUPERADMIN
+  ADMIN
+  SELLER
+  TECHNICIAN
+}
+
+model User {
+  id          String    @id @default(cuid())
+  email       String    @unique
+  password    String
+  name        String
+  role        UserRole
+  companyId   String?
+  branchId    String?
+  active      Boolean   @default(true)
+  lastLogin   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  company     Company?  @relation(fields: [companyId], references: [id])
+  branch      Branch?   @relation(fields: [branchId], references: [id])
+  workOrders  WorkOrder[]
+  timesheets  Timesheet[]
+  notifications Notification[]
+
+  @@map("users")
+}
+
+// ===== SISTEMA DE CLIENTES =====
+model Customer {
+  id          String @id @default(cuid())
+  name        String
+  document    String // CPF ou CNPJ
+  email       String?
+  phone       String
+  address     String?
+  city        String?
+  state       String?
+  zipCode     String?
+  companyId   String
+  active      Boolean @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company     Company @relation(fields: [companyId], references: [id])
+  devices     Device[]
+  workOrders  WorkOrder[]
+  invoices    Invoice[]
+
+  @@unique([document, companyId])
+  @@map("customers")
+}
+
+model Device {
+  id          String @id @default(cuid())
+  brand       String
+  model       String
+  serialNumber String?
+  description String?
+  customerId  String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  customer    Customer @relation(fields: [customerId], references: [id])
+  workOrders  WorkOrder[]
+
+  @@map("devices")
+}
+
+// ===== SISTEMA DE ORDENS DE SERVIÇO =====
+enum WorkOrderStatus {
+  PENDING     // Aguardando
+  IN_PROGRESS // Em andamento
+  WAITING_APPROVAL // Aguardando aprovação
+  APPROVED    // Aprovado
+  REJECTED    // Rejeitado
+  COMPLETED   // Concluído
+  DELIVERED   // Entregue
+  CANCELLED   // Cancelado
+}
+
+enum WorkOrderPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model WorkOrder {
+  id              String @id @default(cuid())
+  number          String @unique
+  title           String
+  description     String
+  status          WorkOrderStatus @default(PENDING)
+  priority        WorkOrderPriority @default(MEDIUM)
+  customerId      String
+  deviceId        String?
+  companyId       String
+  branchId        String?
+  assignedUserId  String?
+  estimatedHours  Float?
+  totalAmount     Decimal @default(0)
+  laborAmount     Decimal @default(0)
+  partsAmount     Decimal @default(0)
+  approved        Boolean @default(false)
+  approvedAt      DateTime?
+  completedAt     DateTime?
+  deliveredAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  customer        Customer @relation(fields: [customerId], references: [id])
+  device          Device? @relation(fields: [deviceId], references: [id])
+  company         Company @relation(fields: [companyId], references: [id])
+  branch          Branch? @relation(fields: [branchId], references: [id])
+  assignedUser    User? @relation(fields: [assignedUserId], references: [id])
+  
+  items           WorkOrderItem[]
+  timesheets      Timesheet[]
+  attachments     WorkOrderAttachment[]
+  statusHistory   WorkOrderStatusHistory[]
+  invoices        Invoice[]
+
+  @@map("work_orders")
+}
+
+model WorkOrderItem {
+  id            String @id @default(cuid())
+  workOrderId   String
+  productId     String?
+  description   String
+  quantity      Float
+  unitPrice     Decimal
+  totalPrice    Decimal
+  type          String // "LABOR" ou "PART"
+  createdAt     DateTime @default(now())
+
+  workOrder     WorkOrder @relation(fields: [workOrderId], references: [id])
+  product       Product? @relation(fields: [productId], references: [id])
+
+  @@map("work_order_items")
+}
+
+model Timesheet {
+  id            String @id @default(cuid())
+  workOrderId   String
+  userId        String
+  startTime     DateTime
+  endTime       DateTime?
+  description   String?
+  hours         Float?
+  createdAt     DateTime @default(now())
+
+  workOrder     WorkOrder @relation(fields: [workOrderId], references: [id])
+  user          User @relation(fields: [userId], references: [id])
+
+  @@map("timesheets")
+}
+
+model WorkOrderAttachment {
+  id            String @id @default(cuid())
+  workOrderId   String
+  filename      String
+  originalName  String
+  mimeType      String
+  size          Int
+  url           String
+  type          String // "PHOTO", "DOCUMENT", "VIDEO"
+  createdAt     DateTime @default(now())
+
+  workOrder     WorkOrder @relation(fields: [workOrderId], references: [id])
+
+  @@map("work_order_attachments")
+}
+
+model WorkOrderStatusHistory {
+  id            String @id @default(cuid())
+  workOrderId   String
+  status        WorkOrderStatus
+  comment       String?
+  userId        String?
+  createdAt     DateTime @default(now())
+
+  workOrder     WorkOrder @relation(fields: [workOrderId], references: [id])
+
+  @@map("work_order_status_history")
+}
+
+// ===== SISTEMA DE ESTOQUE =====
+model Product {
+  id            String @id @default(cuid())
+  name          String
+  description   String?
+  sku           String
+  barcode       String?
+  category      String?
+  brand         String?
+  model         String?
+  unitPrice     Decimal
+  costPrice     Decimal?
+  minStock      Int @default(0)
+  companyId     String
+  active        Boolean @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  company       Company @relation(fields: [companyId], references: [id])
+  stock         ProductStock[]
+  workOrderItems WorkOrderItem[]
+  purchaseOrderItems PurchaseOrderItem[]
+
+  @@unique([sku, companyId])
+  @@map("products")
+}
+
+model ProductStock {
+  id            String @id @default(cuid())
+  productId     String
+  branchId      String
+  quantity      Int @default(0)
+  reservedQty   Int @default(0)
+  updatedAt     DateTime @updatedAt
+
+  product       Product @relation(fields: [productId], references: [id])
+  branch        Branch @relation(fields: [branchId], references: [id])
+
+  @@unique([productId, branchId])
+  @@map("product_stock")
+}
+
+model Supplier {
+  id            String @id @default(cuid())
+  name          String
+  document      String
+  email         String?
+  phone         String?
+  address       String?
+  companyId     String
+  active        Boolean @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  company       Company @relation(fields: [companyId], references: [id])
+  purchaseOrders PurchaseOrder[]
+
+  @@map("suppliers")
+}
+
+enum PurchaseOrderStatus {
+  PENDING
+  APPROVED
+  ORDERED
+  RECEIVED
+  CANCELLED
+}
+
+model PurchaseOrder {
+  id            String @id @default(cuid())
+  number        String @unique
+  supplierId    String
+  status        PurchaseOrderStatus @default(PENDING)
+  totalAmount   Decimal @default(0)
+  notes         String?
+  orderDate     DateTime?
+  expectedDate  DateTime?
+  receivedDate  DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  supplier      Supplier @relation(fields: [supplierId], references: [id])
+  items         PurchaseOrderItem[]
+
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id              String @id @default(cuid())
+  purchaseOrderId String
+  productId       String
+  quantity        Int
+  unitPrice       Decimal
+  totalPrice      Decimal
+  receivedQty     Int @default(0)
+
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  product         Product @relation(fields: [productId], references: [id])
+
+  @@map("purchase_order_items")
+}
+
+// ===== SISTEMA FINANCEIRO =====
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  PIX
+  BANK_TRANSFER
+  CHECK
+}
+
+model Invoice {
+  id            String @id @default(cuid())
+  number        String @unique
+  customerId    String
+  workOrderId   String?
+  companyId     String
+  status        InvoiceStatus @default(DRAFT)
+  amount        Decimal
+  dueDate       DateTime
+  paidDate      DateTime?
+  paymentMethod PaymentMethod?
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  customer      Customer @relation(fields: [customerId], references: [id])
+  workOrder     WorkOrder? @relation(fields: [workOrderId], references: [id])
+  company       Company @relation(fields: [companyId], references: [id])
+  payments      Payment[]
+
+  @@map("invoices")
+}
+
+model Payment {
+  id            String @id @default(cuid())
+  invoiceId     String
+  amount        Decimal
+  method        PaymentMethod
+  reference     String? // Referência do pagamento (ex: ID do Pix)
+  paidAt        DateTime @default(now())
+  notes         String?
+
+  invoice       Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@map("payments")
+}
+
+// ===== SISTEMA DE NOTIFICAÇÕES =====
+enum NotificationType {
+  EMAIL
+  SMS
+  WHATSAPP
+  PUSH
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  DELIVERED
+  FAILED
+}
+
+model Notification {
+  id            String @id @default(cuid())
+  type          NotificationType
+  recipient     String // Email, telefone, etc
+  subject       String?
+  message       String
+  status        NotificationStatus @default(PENDING)
+  companyId     String?
+  userId        String?
+  workOrderId   String?
+  sentAt        DateTime?
+  deliveredAt   DateTime?
+  createdAt     DateTime @default(now())
+
+  company       Company? @relation(fields: [companyId], references: [id])
+  user          User? @relation(fields: [userId], references: [id])
+
+  @@map("notifications")
+}
+
+// ===== SISTEMA DE AUDITORIA =====
+model AuditLog {
+  id            String @id @default(cuid())
+  userId        String?
+  action        String
+  entity        String
+  entityId      String
+  oldValues     Json?
+  newValues     Json?
+  ipAddress     String?
+  userAgent     String?
+  createdAt     DateTime @default(now())
+
+  @@map("audit_logs")
+}
