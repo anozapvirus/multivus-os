@@ -41,21 +41,22 @@ services:
       timeout: 10s
       retries: 3
 
-  # MULTIVUS OS Application
-  app:
+  # Backend API Service
+  backend:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
-    container_name: multivus-app
+    container_name: multivus-backend
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://${DATABASE_USER:-multivus}:${DATABASE_PASSWORD}@postgres:5432/${DATABASE_NAME:-multivus_os}
       REDIS_URL: redis://:${REDIS_PASSWORD:-redis123}@redis:6379
       JWT_SECRET: ${JWT_SECRET}
       NODE_ENV: production
-      PORT: 3000
+      PORT: 3001
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
     ports:
-      - "3000:3000"
+      - "3001:3001"
     depends_on:
       postgres:
         condition: service_healthy
@@ -66,6 +67,24 @@ services:
     volumes:
       - ./uploads:/app/uploads
       - ./logs:/app/logs
+
+  # Frontend Service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: multivus-frontend
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - multivus-network
 
   # Nginx Reverse Proxy
   nginx:
@@ -80,7 +99,8 @@ services:
       - ./ssl:/etc/nginx/ssl:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
-      - app
+      - backend
+      - frontend
     networks:
       - multivus-network
 
