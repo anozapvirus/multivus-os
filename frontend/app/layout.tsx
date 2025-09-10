@@ -8,9 +8,6 @@ export const metadata: Metadata = {
   title: "MULTIVUS OS - Sistema de Gestão de Ordens de Serviço",
   description: "Sistema completo para gestão de ordens de serviço, clientes e inventário",
   generator: "MULTIVUS OS",
-  manifest: "/manifest.json",
-  themeColor: "#2563eb",
-  viewport: "width=device-width, initial-scale=1, maximum-scale=1",
 }
 
 export default function RootLayout({
@@ -20,7 +17,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR">
-      <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable} antialiased`}>{children}</body>
+      <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>{children}</body>
     </html>
   )
 }

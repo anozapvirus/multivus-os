@@ -41,7 +41,6 @@ services:
       timeout: 10s
       retries: 3
 
-  # Backend API Service
   backend:
     build:
       context: ./backend
@@ -54,7 +53,7 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       NODE_ENV: production
       PORT: 3001
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      FRONTEND_URL: http://frontend:3000
     ports:
       - "3001:3001"
     depends_on:
@@ -68,7 +67,6 @@ services:
       - ./uploads:/app/uploads
       - ./logs:/app/logs
 
-  # Frontend Service
   frontend:
     build:
       context: ./frontend
@@ -76,9 +74,9 @@ services:
     container_name: multivus-frontend
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
-      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      NEXT_PUBLIC_API_URL: http://backend:3001
       NODE_ENV: production
+      PORT: 3000
     ports:
       - "3000:3000"
     depends_on:

@@ -3,27 +3,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Building2, Users, Shield, ArrowRight } from "lucide-react"
 import Link from "next/link"
-import { useEffect } from "react"
-import { auth } from "@/lib/auth"
-import { useRouter } from "next/navigation"
 
 export default function HomePage() {
-  const router = useRouter()
-
-  useEffect(() => {
-    // Redirect if already authenticated
-    if (auth.isAuthenticated()) {
-      const user = auth.getCurrentUser()
-      if (user?.role === "SUPERADMIN") {
-        router.push("/superadmin/dashboard")
-      } else if (user?.role === "CLIENT") {
-        router.push("/portal/dashboard")
-      } else if (auth.isAdmin()) {
-        router.push("/admin/dashboard")
-      }
-    }
-  }, [router])
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
       <div className="w-full max-w-4xl">
